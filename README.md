@@ -117,3 +117,107 @@ By using Terraform, organizations can automate the provisioning and teardown of 
 1) Go on the terraform website and select the **Windows AMD64**.
 2) This will download as a zip you can then extract this and add it to a `C:\my-cmd-line-tools`.
 3) Search on the search below **Edit System Environment Variables** and add a PATH env variable with the path to the terraform file. 
+
+---
+# Launching an EC2 instance using terraform
+
+1. Make environment variables as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` and store them under **System variables**.
+2. Setup your `.gitignore` and add files to ensure that credentials are not being pushed to GitHub. 
+3. Create a `main.tf` file this is where you will write your script to deploy the instance. In this script you want to include the following: [Terraform script to launch EC2 instance](main.tf).
+4. When you have at least the `provider` in your script you can use `terraform init` in a new git bash window once you have `cd` to the correct directory.
+5. Once you have completed the script ([Terraform script to launch EC2 instance](main.tf)). Then you can run `terraform plan` and `terraform apply`. 
+6. You can check this and see if your instance has been created on **AWS**. 
+7. To terminate this instance you can use: `terraform destroy`.   
+
+## Adding a Security Group using Terraform
+* [Terraform script to add a security group.](create-aws-sg/main.tf)
+
+## Adding Variables in Terraform
+* This is the format of the variables and it should be stored in a separate folder named `variable.tf` and in your `main.tf` you call the variable as `var.<variable-name>`:
+```hcl
+variable "aws_region" {
+  description = "The AWS region to deploy resources"
+  default     = "eu-west-1"
+}
+```
+
+---
+
+# Push and Pull Configuration Management in IaC
+
+## What is Push and Pull Configuration Management?
+
+* In **Infrastructure as Code (IaC)**, configuration management describes how system configurations are applied and maintained on servers. 
+* There are two primary models for configuration management: **push** and **pull**.
+
+### Push Configuration Management
+* In the push model, a central server or control system sends (or "pushes") the desired configurations to the target machines (nodes). 
+* The admin or orchestration tool directly pushes out changes to the systems that need configuration updates. 
+
+- **How it works**: The administrator initiates the process manually or via automation, and the configurations are deployed from a central server.
+- **Use cases**: Push is often used for smaller-scale environments or environments where control over the configuration deployment timing is critical.
+
+### Pull Configuration Management
+* In the pull model, the target nodes are responsible for checking into a central server, retrieving (or "pulling") their configurations, and applying them. 
+* The configurations live on a central repository, and the nodes autonomously pull updates periodically.
+
+- **How it works**: Agents running on each node communicate with the central server to fetch the latest configurations.
+- **Use cases**: The pull model is often used in larger-scale environments where consistent state is critical and regular checks for updates can ensure consistency.
+
+## Which Tools Support Push and Pull?
+
+Various tools in the DevOps ecosystem support push and pull models:
+
+- **Push-based Tools**:
+  - **Ansible**: An open-source automation platform that works via SSH to push configurations to target nodes.
+  - **SaltStack** (can also be pull-based): Can be configured to operate in push mode where configurations are sent from a central control node.
+
+- **Pull-based Tools**:
+  - **Puppet**: Uses agents on nodes to pull configurations from a central Puppet Master.
+  - **Chef**: Nodes pull configurations from a Chef server and apply them locally.
+  - **SaltStack**: Can operate in pull mode with minions fetching updates from a Salt master.
+  
+## Does Terraform Use the Push or Pull Configuration?
+
+* Terraform uses a **push-based model** for applying infrastructure changes. When you run commands like `terraform apply`, Terraform executes a plan from your local machine or a CI/CD pipeline and **pushes** the necessary infrastructure changes to the respective cloud providers (AWS, Azure, GCP, etc.). 
+* Terraform is not agent-based, so it doesn't rely on nodes to pull configurations.
+
+## Which is Better: Push or Pull Configuration Management?
+
+The answer depends on your use case:
+
+- **Push Configuration Advantages**:
+  - More control over deployment timing, useful for smaller environments or those requiring fine-grained deployment control.
+  - Easier for immediate, on-demand updates.
+
+- **Pull Configuration Advantages**:
+  - Ideal for larger environments where nodes should autonomously manage their configurations.
+  - Ensures consistency as nodes regularly check for updates and pull changes.
+
+### Choosing Between Push and Pull:
+- **For smaller environments**: Push may be simpler and more straightforward.
+- **For large, complex environments**: Pull models are generally better because they ensure continuous consistency, especially when infrastructure scales.
+
+### Conclusion:
+* There is no universally "better" approach—it depends on the complexity, scale, and requirements of your infrastructure. 
+* In some cases, you may even combine both models depending on the specific use cases.
+
+
+# Terraform GitHub Repository Automation
+
+## Goal
+Automate the creation of a GitHub repository using Terraform.
+
+## Steps
+
+1. Create a Personal Access Token (PAT) on GitHub with necessary scopes.
+   1. Go to **Settings** > **Developer Settings** > **Create Classic Token** > **Select the repo**.
+   2. This will generate the token. Make sure to 
+2. Store the PAT in environment variables or in `variable.tf`.
+3. Configure Terraform with a `main.tf` file to create a GitHub repository.
+4. Create a `.gitignore` file to ignore sensitive files.
+5. Initialize and apply the Terraform configuration.
+6. Verify the repository creation on GitHub.
+
+### Repository Link
+[tech264-terraform-create-github-repo](https://github.com/your_username/tech264-terraform-create-github-repo)
