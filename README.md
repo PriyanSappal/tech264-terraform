@@ -1,10 +1,13 @@
-# Terraform Overview
+# Terraform 
 
 ## What is Terraform?
-Terraform is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. It allows users to define and provision data center infrastructure using a high-level configuration language called **HashiCorp Configuration Language (HCL)**. Terraform manages infrastructure across a wide range of service providers such as AWS, Azure, GCP, VMware, and even on-premise environments.
+* Terraform is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. 
+* It allows users to define and provision data center infrastructure using a high-level configuration language called **HashiCorp Configuration Language (HCL)**. 
+* Terraform manages infrastructure across a wide range of service providers such as AWS, Azure, GCP, VMware, and even on-premise environments.
 
 ### What is Terraform used for?
-Terraform is used to automate the process of creating, updating, and versioning infrastructure. By using code, it allows teams to manage infrastructure resources such as virtual machines, networking, and storage in a declarative way. This ensures that infrastructure is always consistent across environments.
+* Terraform is used to automate the process of creating, updating, and versioning infrastructure. 
+* By using code, it allows teams to manage infrastructure resources such as virtual machines, networking, and storage in a declarative way. This ensures that infrastructure is always consistent across environments.
 
 ---
 
@@ -42,7 +45,8 @@ Terraform is widely adopted across industries, from small startups to large ente
 ---
 
 ## What is Orchestration in IaC?
-**Orchestration** in Infrastructure as Code refers to the process of coordinating and managing multiple components of infrastructure (e.g., networks, servers, databases) to work together harmoniously. It involves defining the relationships and dependencies between various resources and automating their provisioning and configuration.
+* **Orchestration** in Infrastructure as Code refers to the process of coordinating and managing multiple components of infrastructure (e.g., networks, servers, databases) to work together harmoniously. 
+* It involves defining the relationships and dependencies between various resources and automating their provisioning and configuration.
 
 ### How Does Terraform Act as an Orchestrator?
 Terraform acts as an orchestrator by:
@@ -57,6 +61,7 @@ Terraform acts as an orchestrator by:
 ### AWS Credentials Lookup Order in Terraform:
 Terraform checks for AWS credentials in the following order of precedence:
 1. **Environment Variables**: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+    * You would need to set up system variables under **Edit the system environment variables**.
 2. **AWS Credentials File**: Located at `~/.aws/credentials`.
 3. **Instance Profile**: For EC2 instances running in AWS with an IAM role attached.
 4. **Explicit Access in Terraform Config**: Credentials provided directly in the Terraform configuration file (not recommended).
