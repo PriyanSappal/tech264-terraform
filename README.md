@@ -1,9 +1,11 @@
 # Terraform 
 
 ## What is Terraform?
-* Terraform is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. 
-* It allows users to define and provision data center infrastructure using a high-level configuration language called **HashiCorp Configuration Language (HCL)**. 
-* Terraform manages infrastructure across a wide range of service providers such as AWS, Azure, GCP, VMware, and even on-premise environments.
+* **Terraform** is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. 
+* It allows users to define and provision data center infrastructure using a high-level configuration language called **HashiCorp Configuration Language (HCL)**. Good balance and understandble from machines and humans. 
+* **Terraform** manages infrastructure across a wide range of service providers such as AWS, Azure, GCP, VMware, and even on-premise environments.
+* **Terraform** is an orchestration tool (infrastructure provisioning tool - creates, deploys, manages and destroys the infrastructure).
+* Terraform see infrastructure as **immutable**. 
 
 ### What is Terraform used for?
 * Terraform is used to automate the process of creating, updating, and versioning infrastructure. 
@@ -20,6 +22,9 @@
 4. **Automation**: Automates repetitive manual tasks related to infrastructure management, reducing human error.
 5. **Modular and Reusable Code**: Create reusable modules for infrastructure components, enabling easier scaling and management.
 6. **State Management**: Terraform stores infrastructure states, which enables you to plan changes and apply only the necessary updates to your environment.
+7. **Cloud Agnostic**: Can deploy to any cloud provider because it uses different cloud providers. Each provider maintains their own plugins (e.g. Azure has an Azure plugin in Terraform that will interface with the API of Azure).  
+8. **Free?**: We can use it for free commercially. Terraform cannot be used to create a competing product.
+9. **Open-Source and Easy to use**. 
 
 ---
 
@@ -59,7 +64,7 @@ Terraform acts as an orchestrator by:
 ## Best Practice: Supplying AWS Credentials to Terraform
 
 ### AWS Credentials Lookup Order in Terraform:
-Terraform checks for AWS credentials in the following order of precedence:
+Terraform checks for AWS credentials in the following order of precedence (if it can't find from the one it will check the nexxt one on the list):
 1. **Environment Variables**: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
     * You would need to set up system variables under **Edit the system environment variables**.
 2. **AWS Credentials File**: Located at `~/.aws/credentials`.
@@ -93,7 +98,10 @@ The recommended approach for securely supplying AWS credentials is through **env
 ---
 
 ## Why Use Terraform for Different Environments (Production, Testing, etc.)
-Using Terraform to manage multiple environments (such as **production**, **staging**, and **testing**) allows you to maintain consistent infrastructure across these environments while also adapting to their unique requirements.
+* Using Terraform to manage multiple environments (such as **production**, **staging**, and **testing**) allows you to maintain consistent infrastructure across these environments while also adapting to their unique requirements.
+* Developers using different environments will cause problems. Having a consistent environment and then that matching environment is used throughout the different environments. 
+    * All the dependencies should match. 
+    * **Production environment** needs to be scalable so you have more load than **Testing**. 
 
 ### Benefits:
 1. **Consistency**: Ensures that each environment is created with the same infrastructure code, reducing drift and errors.
@@ -105,3 +113,7 @@ By using Terraform, organizations can automate the provisioning and teardown of 
 
 ---
 
+# Steps to install terraform 
+1) Go on the terraform website and select the **Windows AMD64**.
+2) This will download as a zip you can then extract this and add it to a `C:\my-cmd-line-tools`.
+3) Search on the search below **Edit System Environment Variables** and add a PATH env variable with the path to the terraform file. 
