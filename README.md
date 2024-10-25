@@ -31,6 +31,25 @@
   - [Goal](#goal)
   - [Steps](#steps)
     - [Repository Link](#repository-link)
+- [Two-Tier Azure Deployment Guide with Terraform](#two-tier-azure-deployment-guide-with-terraform)
+  - [Prerequisites](#prerequisites)
+  - [Steps](#steps-1)
+    - [1. Initialize Terraform Configuration](#1-initialize-terraform-configuration)
+    - [2. Define Provider](#2-define-provider)
+    - [3. Configure Network Resources](#3-configure-network-resources)
+      - [a) Define the Virtual Network and Subnets](#a-define-the-virtual-network-and-subnets)
+    - [4. Configure Network Security Groups (NSGs)](#4-configure-network-security-groups-nsgs)
+      - [a) App VM NSG](#a-app-vm-nsg)
+      - [b) DB VM NSG](#b-db-vm-nsg)
+    - [5. Create Network Interfaces](#5-create-network-interfaces)
+    - [6. Create Virtual Machines](#6-create-virtual-machines)
+      - [App VM](#app-vm)
+      - [DB VM](#db-vm)
+    - [7. Apply the Configuration](#7-apply-the-configuration)
+    - [8. Once Created](#8-once-created)
+  - [Notes](#notes)
+  - [Clean Up](#clean-up)
+  - [Blockers](#blockers)
 - [Terraform Project Setup with Backend and Infrastructure Separation](#terraform-project-setup-with-backend-and-infrastructure-separation)
   - [Directory Structure](#directory-structure)
     - [Step 1: Backend Setup](#step-1-backend-setup)
@@ -264,6 +283,287 @@ Automate the creation of a GitHub repository using Terraform.
 [tech264-terraform-create-github-repo](https://github.com/your_username/tech264-terraform-create-github-repo)
 
 
+# Two-Tier Azure Deployment Guide with Terraform
+
+This guide outlines the steps for deploying a two-tier Azure setup using Terraform. The setup includes a Virtual Network (VNet) with two subnets, one for the application VM and one for the database VM, along with configured Network Security Groups (NSGs) to manage access.
+
+## Prerequisites
+- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) installed and configured. 
+  - Make sure you use the command prompt to login using `az login`, once you have installed the `AZ CLI`
+- [Terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli) installed.
+- An existing Azure Resource Group - which is `tech264`
+
+## Steps
+
+### 1. Initialize Terraform Configuration
+1. Create a new folder for your Terraform project and navigate into it.
+   ```bash
+   mkdir tech264-tf-azure && cd tech264-tf-azure
+   ```
+2. Create a `main.tf` file to hold the Terraform configuration.
+
+### 2. Define Provider
+In `main.tf`, specify the Azure provider:
+```hcl
+provider "azurerm" {
+  features {}
+}
+```
+
+### 3. Configure Network Resources
+#### a) Define the Virtual Network and Subnets
+Add the following block to `main.tf` to create a Virtual Network with two subnets.
+
+```hcl
+# Reference an existing resource group
+data "azurerm_resource_group" "main" {
+  name = "tech264" # Replace with the actual name of your resource group
+  location            = "UK South"
+  resource_group_name = "your-existing-rg-name"
+  address_space       = ["10.0.0.0/16"]
+}
+
+resource "azurerm_subnet" "app_subnet" {
+  name                 = "app-subnet"
+  resource_group_name  = azurerm_virtual_network.main_vnet.resource_group_name
+  virtual_network_name = azurerm_virtual_network.main_vnet.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+resource "azurerm_subnet" "db_subnet" {
+  name                 = "db-subnet"
+  resource_group_name  = azurerm_virtual_network.main_vnet.resource_group_name
+  virtual_network_name = azurerm_virtual_network.main_vnet.name
+  address_prefixes     = ["10.0.3.0/24"]
+}
+```
+
+### 4. Configure Network Security Groups (NSGs)
+#### a) App VM NSG
+Allow ports 22, 80, and 3000.
+
+```hcl
+resource "azurerm_network_security_group" "app_nsg" {
+  name                = "app-nsg"
+  location            = azurerm_virtual_network.main_vnet.location
+  resource_group_name = azurerm_virtual_network.main_vnet.resource_group_name
+
+  security_rule {
+    name                       = "Allow-SSH"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 22
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-HTTP"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 80
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-Port-3000"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 3000
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+```
+
+#### b) DB VM NSG
+Allow only SSH and MongoDB access, and deny everything else.
+
+```hcl
+resource "azurerm_network_security_group" "db_nsg" {
+  name                = "db-nsg"
+  location            = azurerm_virtual_network.main_vnet.location
+  resource_group_name = azurerm_virtual_network.main_vnet.resource_group_name
+
+  security_rule {
+    name                       = "Allow-SSH"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 22
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-MongoDB"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 27017
+    source_address_prefix      = "10.0.1.0/24"  # App Subnet CIDR
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Deny-All"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+```
+
+### 5. Create Network Interfaces
+Create NICs for each VM.
+
+```hcl
+resource "azurerm_network_interface" "app_nic" {
+  name                = "app-nic"
+  location            = azurerm_virtual_network.main_vnet.location
+  resource_group_name = azurerm_virtual_network.main_vnet.resource_group_name
+
+  ip_configuration {
+    name                          = "app-ip-config"
+    subnet_id                     = azurerm_subnet.app_subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_network_interface" "db_nic" {
+  name                = "db-nic"
+  location            = azurerm_virtual_network.main_vnet.location
+  resource_group_name = azurerm_virtual_network.main_vnet.resource_group_name
+
+  ip_configuration {
+    name                          = "db-ip-config"
+    subnet_id                     = azurerm_subnet.db_subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+```
+* After creating the **NSG** and **NIC**, you would need to create an association between these:
+```hcl 
+resource "azurerm_network_interface_security_group_association" "db_nic_2_nsg" {
+  network_interface_id      = azurerm_network_interface.db_nic.id
+  network_security_group_id = azurerm_network_security_group.db_nsg.id
+}
+
+resource "azurerm_network_interface_security_group_association" "app_nic_2_nsg" {
+  network_interface_id      = azurerm_network_interface.app_nic.id
+  network_security_group_id = azurerm_network_security_group.app_nsg.id
+}
+```
+### 6. Create Virtual Machines
+* Provision both VMs with NSGs, SSH keys, and Ubuntu 22.04. Or you can use an image that you have already created. For example the images that were created for the `App VM` and `DB VM` with the user data already added in. All you need to do is add user data for the app to run and include the the `private-ip` for the DB.
+
+#### App VM
+```hcl
+resource "azurerm_linux_virtual_machine" "app_vm" {
+  name                = "app-vm"
+  location            = azurerm_virtual_network.main_vnet.location
+  resource_group_name = azurerm_virtual_network.main_vnet.resource_group_name
+  size                = "Standard_B1s"
+  admin_username      = "adminuser"
+  network_interface_ids = [azurerm_network_interface.app_nic.id]
+  admin_ssh_key {
+    username   = "adminuser"
+    public_key = file("~/.ssh/your_ssh_key.pub")
+  }
+   os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+    disk_size_gb         = 30
+  }
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-pro-azure"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+}
+```
+* Referencing your own image: 
+``` hcl
+source_image_id = "/subscriptions/cd36dfff-6e85-4164-b64e-b4078a773259/resourceGroups/tech264/providers/Microsoft.Compute/images/tech264-priyan-db-image-readyy-to-run"
+```
+
+#### DB VM
+```hcl
+resource "azurerm_linux_virtual_machine" "db_vm" {
+  name                = "db-vm"
+  location            = azurerm_virtual_network.main_vnet.location
+  resource_group_name = azurerm_virtual_network.main_vnet.resource_group_name
+  size                = "Standard_B1s"
+  admin_username      = "azureuser"
+  network_interface_ids = [azurerm_network_interface.db_nic.id]
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("~/.ssh/your_ssh_key.pub")
+  }
+   os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+    disk_size_gb         = 30
+  }
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-pro-azure"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+}
+```
+
+### 7. Apply the Configuration
+Initialize and apply the configuration.
+
+```bash
+terraform init
+terraform apply
+```
+
+### 8. Once Created
+Check the public ip by searching on the browser and check the `/posts` page is working.
+
+## Notes
+- Replace `"your-existing-rg-name"` with the name of your resource group.
+- Adjust paths for SSH keys as necessary.
+
+## Clean Up
+To destroy resources created by this deployment, run:
+
+```bash
+terraform destroy
+```
+
+## Blockers
+* Make sure to create an association with your NSG and NIC. 
+* Create a **Public IP Address**. 
+* You can create the infrastructure with minimal code and then keep adding extra components to visualise the new additions. 
+* Create `variable.tf` for better structure. 
+* Making a `.gitignore` file in each folder. Therefore you are not pushing any credentials to your GitHub repo. 
+
+
 # Terraform Project Setup with Backend and Infrastructure Separation
 
 This guide outlines the steps to create a Terraform project that separates the backend configuration (for state management) from the main infrastructure deployment.
@@ -281,26 +581,33 @@ This guide outlines the steps to create a Terraform project that separates the b
 
 ### Step 1: Backend Setup
 
-In the `backend/` folder, create a `main.tf` file to define the Azure storage account for storing the Terraform state file.
+In the `backend/` folder, create a `main.tf` file to define the Azure storage account for storing the Terraform state file. Backend can have a `variable.tf` file. 
 
 #### `backend/main.tf`
 
 ```hcl
 provider "azurerm" {
   features {}
+  use_cli                         = true
+  subscription_id                 = var.subscription_id
+  resource_provider_registrations = "none"
 }
 
-resource "azurerm_resource_group" "backend_rg" {
-  name     = "tf-backend-rg"
-  location = "UK South" # Adjust the region accordingly
+# Reference an existing resource group
+data "azurerm_resource_group" "main" {
+  name = "tech264" # Replace with the actual name of your resource group
 }
+
 
 resource "azurerm_storage_account" "backend_sa" {
-  name                     = "tfbackendstorageacct"  # Storage account name must be unique
-  resource_group_name      = azurerm_resource_group.backend_rg.name
-  location                 = azurerm_resource_group.backend_rg.location
+  name                     = "tfpriyanstorageacct" # Storage account name must be unique
+  resource_group_name      = data.azurerm_resource_group.main.name
+  location                 = data.azurerm_resource_group.main.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
+  allow_nested_items_to_be_public = false
+  tags = {Name="priyan"
+  }
 }
 
 resource "azurerm_storage_container" "tfstate" {
@@ -331,15 +638,15 @@ resource "azurerm_storage_container" "tfstate" {
 
 ### Step 3: Configure the Main Infrastructure Folder to Use the Backend
 
-Now that the backend is set up, configure the `infrastructure` folder to use this backend for its state management.
+Now that the backend is set up, configure the `infrastructure` folder to use this `backend` for its state management.
 
 #### `infrastructure/main.tf`
-
+This will include our script from the Two-Tier Deployment. The addition is at the top where we have referenced our `backend`. 
 ```hcl
 terraform {
   backend "azurerm" {
-    resource_group_name   = "tf-backend-rg"
-    storage_account_name  = "tfbackendstorageacct"
+    resource_group_name   = "tech264"
+    storage_account_name  = "tfpriyanstorageacct"
     container_name        = "tfstate"
     key                   = "infrastructure/terraform.tfstate" # You can organize state files by folder
   }
@@ -347,15 +654,241 @@ terraform {
 
 provider "azurerm" {
   features {}
+  use_cli                         = true
+  subscription_id                 = var.subscription_id
+  resource_provider_registrations = "none"
 }
 
-# Define your infrastructure resources here, for example:
-resource "azurerm_resource_group" "app_rg" {
-  name     = "app-rg"
-  location = "UK South"
+
+# Reference an existing resource group
+data "azurerm_resource_group" "main" {
+  name = "tech264" # Replace with the actual name of your resource group
 }
 
-# Add other infrastructure components such as VMs, networking, etc.
+# Create a Virtual Network
+resource "azurerm_virtual_network" "vnet" {
+  name                = "terraform-vnet"
+  address_space       = ["10.0.0.0/16"]
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+}
+
+# Create the Application Subnet
+resource "azurerm_subnet" "app_subnet" {
+  name                 = "app-subnet"
+  resource_group_name  = data.azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+# Create the Database Subnet
+resource "azurerm_subnet" "db_subnet" {
+  name                 = "db-subnet"
+  resource_group_name  = data.azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.3.0/24"]
+}
+
+# Create NSG for App VM
+resource "azurerm_network_security_group" "app_nsg" {
+  name                = "priyan-app-nsg"
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+
+  # Inbound security rules
+  security_rule {
+    name                       = "Allow-SSH"
+    priority                   = 300
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 22
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-HTTP"
+    priority                   = 310
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 80
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-Port-3000"
+    priority                   = 320
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 3000
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+# Create NSG for DB VM
+resource "azurerm_network_security_group" "db_nsg" {
+  name                = "priyan-db-nsg"
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+
+  # Inbound security rules
+  security_rule {
+    name                       = "Allow-SSH"
+    priority                   = 300
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 22
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-MongoDB"
+    priority                   = 320
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = 27017
+    source_address_prefix      = "10.0.2.0/24" # App Subnet CIDR block
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Deny-All"
+    priority                   = 500
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+# Association with NSG and NIC
+resource "azurerm_network_interface_security_group_association" "db_nic_2_nsg" {
+  network_interface_id      = azurerm_network_interface.db_nic.id
+  network_security_group_id = azurerm_network_security_group.db_nsg.id
+}
+
+resource "azurerm_network_interface_security_group_association" "app_nic_2_nsg" {
+  network_interface_id      = azurerm_network_interface.app_nic.id
+  network_security_group_id = azurerm_network_security_group.app_nsg.id
+}
+# Create Public IP for App VM
+resource "azurerm_public_ip" "app_public_ip" {
+  name                = "priyan-app-public-ip"
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  allocation_method   = "Static"
+}
+
+# Create NIC for App VM
+resource "azurerm_network_interface" "app_nic" {
+  name                = "priyan-app-nic"
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+
+  ip_configuration {
+    name                          = "app-ip-config"
+    subnet_id                     = azurerm_subnet.app_subnet.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.app_public_ip.id
+  }
+}
+
+# Create NIC for DB VM
+resource "azurerm_network_interface" "db_nic" {
+  name                = "priyan-db-nic"
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+
+  ip_configuration {
+    name                          = "db-ip-config"
+    subnet_id                     = azurerm_subnet.db_subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+# Create the Application VM
+resource "azurerm_linux_virtual_machine" "app_vm" {
+  name                = "priyan-app-vm-from-tf"
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  size                = "Standard_B1s"
+  admin_username      = "adminuser"
+  admin_ssh_key {
+    username   = "adminuser"
+    public_key = file("~/.ssh/tech264-priyan-az-key.pub") # Path to your SSH public key
+  }
+
+  network_interface_ids = [
+    azurerm_network_interface.app_nic.id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+    disk_size_gb         = 30
+  }
+
+  source_image_id = "/subscriptions/cd36dfff-6e85-4164-b64e-b4078a773259/resourceGroups/tech264/providers/Microsoft.Compute/images/tech264-priyan-app-vm-image-readyy-to-run"
+
+  user_data = base64encode(<<-EOF
+  #!/bin/bash
+  export DB_HOST="mongodb://10.0.3.4:27017/posts"
+
+  echo "Change directory to app"
+  cd repo/app
+
+  pm2 stop all
+  echo "start"
+  pm2 start app.js
+  echo "App started with pm2"
+  EOF
+  )
+  
+  depends_on = [azurerm_linux_virtual_machine.db_vm]
+}
+
+# Create the Database VM
+resource "azurerm_linux_virtual_machine" "db_vm" {
+  name                = "priyan-db-vm-from-tf"
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  size                = "Standard_B1s"
+  admin_username      = "adminuser"
+  admin_ssh_key {
+    username   = "adminuser"
+    public_key = file("~/.ssh/tech264-priyan-az-key.pub") # Path to your SSH public key
+  }
+
+  network_interface_ids = [
+    azurerm_network_interface.db_nic.id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+    disk_size_gb         = 30
+  }
+
+  source_image_id = "/subscriptions/cd36dfff-6e85-4164-b64e-b4078a773259/resourceGroups/tech264/providers/Microsoft.Compute/images/tech264-priyan-db-image-readyy-to-run"
+}
+
+
 ```
 
 Make sure to replace the `resource_group_name`, `storage_account_name`, `container_name`, and `key` with the actual names created in the backend.
@@ -378,8 +911,9 @@ Make sure to replace the `resource_group_name`, `storage_account_name`, `contain
    ```bash
    terraform apply
    ```
+* But you won't need to if you have already applied it previously. In that case just complete steps 1 and 2 and that should initialise the backend for your infrastructure. 
 
-   The state file will be stored in the Azure Blob Storage defined in the `backend` configuration.
+* The state file will be stored in the Azure Blob Storage defined in the `backend` configuration.
 
 ---
 
