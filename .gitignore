@@ -9,6 +9,7 @@
 
 # Most important files to protect as they contain credentials 
 # used by Terraform
+# Make sure these state files never get pushed
 terraform.tfstate
 terraform.tfstate.backup
 

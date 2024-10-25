@@ -31,6 +31,15 @@
   - [Goal](#goal)
   - [Steps](#steps)
     - [Repository Link](#repository-link)
+- [Terraform Project Setup with Backend and Infrastructure Separation](#terraform-project-setup-with-backend-and-infrastructure-separation)
+  - [Directory Structure](#directory-structure)
+    - [Step 1: Backend Setup](#step-1-backend-setup)
+      - [`backend/main.tf`](#backendmaintf)
+    - [Step 2: Initialize and Deploy Backend](#step-2-initialize-and-deploy-backend)
+    - [Step 3: Configure the Main Infrastructure Folder to Use the Backend](#step-3-configure-the-main-infrastructure-folder-to-use-the-backend)
+      - [`infrastructure/main.tf`](#infrastructuremaintf)
+    - [Step 4: Initialize and Deploy the Infrastructure](#step-4-initialize-and-deploy-the-infrastructure)
+    - [Summary](#summary)
 
 ## What is Terraform?
 * **Terraform** is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. 
@@ -121,7 +130,7 @@ The recommended approach for securely supplying AWS credentials is through **env
      }
      ```
 
-3. **Use IAM Roles**: For EC2 instances, assign IAM roles with the necessary permissions. Terraform will automatically detect and use the role without the need for explicit credentials.
+3. **Use IAM Roles** if you are using a cloud resource: For EC2 instances, assign IAM roles with the necessary permissions. Terraform will automatically detect and use the role without the need for explicit credentials.
 
 ### How AWS Credentials Should **Never** Be Passed to Terraform:
 - **Do not hard-code credentials** directly in the Terraform files (`.tf` files). This can lead to accidental exposure in version control systems like GitHub.
@@ -243,8 +252,8 @@ Automate the creation of a GitHub repository using Terraform.
 ## Steps
 
 1. Create a Personal Access Token (PAT) on GitHub with necessary scopes.
-   1. Go to **Settings** > **Developer Settings** > **Create Classic Token** > **Select the repo**.
-   2. This will generate the token. Make sure to 
+   1. Go to **Settings** > **Developer Settings** > **Create Classic Token** > **Select repo**.
+   2. This will generate the token. Make sure to never hardcode this.  
 2. Store the PAT in environment variables or in `variable.tf`.
 3. Configure Terraform with a `main.tf` file to create a GitHub repository.
 4. Create a `.gitignore` file to ignore sensitive files.
@@ -253,3 +262,129 @@ Automate the creation of a GitHub repository using Terraform.
 
 ### Repository Link
 [tech264-terraform-create-github-repo](https://github.com/your_username/tech264-terraform-create-github-repo)
+
+
+# Terraform Project Setup with Backend and Infrastructure Separation
+
+This guide outlines the steps to create a Terraform project that separates the backend configuration (for state management) from the main infrastructure deployment.
+
+## Directory Structure
+
+```bash
+/terraform-project
+  ├── /backend
+  │    └── main.tf (contains backend configuration)
+  └── /infrastructure
+       ├── main.tf (contains main architecture for deploying the app)
+       └── variables.tf (optional, contains input variables)
+```
+
+### Step 1: Backend Setup
+
+In the `backend/` folder, create a `main.tf` file to define the Azure storage account for storing the Terraform state file.
+
+#### `backend/main.tf`
+
+```hcl
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "backend_rg" {
+  name     = "tf-backend-rg"
+  location = "UK South" # Adjust the region accordingly
+}
+
+resource "azurerm_storage_account" "backend_sa" {
+  name                     = "tfbackendstorageacct"  # Storage account name must be unique
+  resource_group_name      = azurerm_resource_group.backend_rg.name
+  location                 = azurerm_resource_group.backend_rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+
+resource "azurerm_storage_container" "tfstate" {
+  name                  = "tfstate"
+  storage_account_name  = azurerm_storage_account.backend_sa.name
+  container_access_type = "private"
+}
+```
+
+### Step 2: Initialize and Deploy Backend
+
+1. Navigate to the `backend` folder:
+   ```bash
+   cd terraform-project/backend
+   ```
+
+2. Initialize and apply the backend setup:
+   ```bash
+   terraform init
+   terraform apply
+   ```
+
+   This will create the Azure Storage Account and container for storing the state files.
+
+3. After applying, take note of the following values (you can use `output` blocks if needed):
+   - **Storage Account Name**: `azurerm_storage_account.backend_sa.name`
+   - **Container Name**: `azurerm_storage_container.tfstate.name`
+
+### Step 3: Configure the Main Infrastructure Folder to Use the Backend
+
+Now that the backend is set up, configure the `infrastructure` folder to use this backend for its state management.
+
+#### `infrastructure/main.tf`
+
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name   = "tf-backend-rg"
+    storage_account_name  = "tfbackendstorageacct"
+    container_name        = "tfstate"
+    key                   = "infrastructure/terraform.tfstate" # You can organize state files by folder
+  }
+}
+
+provider "azurerm" {
+  features {}
+}
+
+# Define your infrastructure resources here, for example:
+resource "azurerm_resource_group" "app_rg" {
+  name     = "app-rg"
+  location = "UK South"
+}
+
+# Add other infrastructure components such as VMs, networking, etc.
+```
+
+Make sure to replace the `resource_group_name`, `storage_account_name`, `container_name`, and `key` with the actual names created in the backend.
+
+### Step 4: Initialize and Deploy the Infrastructure
+
+1. Navigate to the `infrastructure` folder:
+   ```bash
+   cd ../infrastructure
+   ```
+
+2. Initialize the Terraform configuration:
+   ```bash
+   terraform init
+   ```
+
+   During this step, Terraform will connect to the backend configured in the `backend` folder.
+
+3. Apply the infrastructure:
+   ```bash
+   terraform apply
+   ```
+
+   The state file will be stored in the Azure Blob Storage defined in the `backend` configuration.
+
+---
+
+### Summary
+
+- **Backend folder**: Contains the configuration to set up Azure Blob Storage for the Terraform state file.
+- **Infrastructure folder**: Contains the infrastructure deployment that uses the backend for state file management.
+- **Separation of concerns**: This setup allows you to independently manage your backend and infrastructure, improving organization and maintainability.
